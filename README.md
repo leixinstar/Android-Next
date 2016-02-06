@@ -69,7 +69,7 @@ NextClient, NextRequest, NextResponse, ProgressListener, RequestInterceptor。�
 
 主要是结合 `http`模块和`task`模块，提供方便的异步网络操作，本模块主要的方法都是异步执行，通过回调接口反馈结果，内部使用 `TaskQeue` 执行异步任务管理，使用 `NextClient` 发送和解析HTTP网络请求，通过回调接口返回数据，网络请求在异步线程执行，回调方法在主线程调用，可用于替代Google的`Volley`库，能极大的减轻应用开发中异步请求数据然后主线程更新UI这一过程的工作量。
 
-- ***HttpAsync** 异步HTTP操作辅助类，支持直接的异步HEAD/GET/DELETE/POST/PUT请求
+- **HttpAsync** 异步HTTP操作辅助类，支持直接的异步HEAD/GET/DELETE/POST/PUT请求
 - **HttpQueue** 异步HTTP任务队列，支持添加和取消HTTP异步任务，支持多种形式的Callback和Transformer
 - **HttpJob** HTTP任务对象，封装了Request/Callback/Transformer等
 - **HttpJobBuilder** 生成HttpJob对象的Builder
