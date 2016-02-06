@@ -195,8 +195,8 @@ NextClient, NextRequest, NextResponse, ProgressListener, RequestInterceptor。�
 
 * Rx文档中文翻译: <https://github.com/mcxiaoke/RxDocs>
 * MQTT协议中文版: <https://github.com/mcxiaoke/mqtt>
-* Awesome-Kotlin:<https://github.com/mcxiaoke/awesome-kotlin>
-* Kotlin-Koi:<https://github.com/mcxiaoke/kotlin-koi>
+* Awesome-Kotlin: <https://github.com/mcxiaoke/awesome-kotlin>
+* Kotlin-Koi: <https://github.com/mcxiaoke/kotlin-koi>
 * Next公共组件库: <https://github.com/mcxiaoke/Android-Next>
 * PackerNg极速打包: <https://github.com/mcxiaoke/packer-ng-plugin>
 * Gradle渠道打包: <https://github.com/mcxiaoke/gradle-packer-plugin>
@@ -209,7 +209,7 @@ NextClient, NextRequest, NextResponse, ProgressListener, RequestInterceptor。�
 
 ## License
 
-    Copyright 2013 - 2015 Xiaoke Zhang
+    Copyright 2013 - 2016 Xiaoke Zhang
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
