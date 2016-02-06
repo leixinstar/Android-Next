@@ -11,10 +11,8 @@
     compile 'com.mcxiaoke.next:core:1.3.+'
     // task 异步任务库，格式:jar和aar
     compile 'com.mcxiaoke.next:task:1.3.+'
-    // http HTTP组件, 格式:jar和aar
+    // http HTTP同步和异步操作, 格式:jar和aar
     compile 'com.mcxiaoke.next:http:1.3.+'
-    // 异步网络和文件IO组件，替代Volley
-    compile 'com.mcxiaoke.next:ioasync:1.3.+'
     // 函数操作组件
     compile 'com.mcxiaoke.next:functions:1.3.+'
     // ui UI组件, 格式:aar
@@ -195,12 +193,14 @@ NextClient, NextRequest, NextResponse, ProgressListener, RequestInterceptor。�
 
 #### 开源项目
 
+* Rx文档中文翻译: <https://github.com/mcxiaoke/RxDocs>
+* MQTT协议中文版: <https://github.com/mcxiaoke/mqtt>
+* Awesome-Kotlin:<https://github.com/mcxiaoke/awesome-kotlin>
+* Kotlin-Koi:<https://github.com/mcxiaoke/kotlin-koi>
 * Next公共组件库: <https://github.com/mcxiaoke/Android-Next>
 * PackerNg极速打包: <https://github.com/mcxiaoke/packer-ng-plugin>
 * Gradle渠道打包: <https://github.com/mcxiaoke/gradle-packer-plugin>
 * EventBus实现xBus: <https://github.com/mcxiaoke/xBus>
-* Rx文档中文翻译: <https://github.com/mcxiaoke/RxDocs>
-* MQTT协议中文版: <https://github.com/mcxiaoke/mqtt>
 * 蘑菇饭App: <https://github.com/mcxiaoke/minicat>
 * 饭否客户端: <https://github.com/mcxiaoke/fanfouapp-opensource>
 * Volley镜像: <https://github.com/mcxiaoke/android-volley>
