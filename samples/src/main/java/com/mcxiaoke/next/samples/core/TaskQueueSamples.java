@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
-import android.view.Window;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -58,7 +57,6 @@ public class TaskQueueSamples extends BaseActivity {
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
         setContentView(R.layout.act_next_executor);
         ButterKnife.inject(this);
         mEditText.setText("https://api.github.com/users/mcxiaoke");
@@ -84,59 +82,72 @@ public class TaskQueueSamples extends BaseActivity {
         final TaskCallback<String> callback = new TaskCallback<String>() {
             @Override
             public void onTaskCancelled(final String name, final Bundle extras) {
-                println("task cancelled " + name + " index:" + extras.getInt("index"));
+                println("task cancelled " + " index:"
+                        + extras.getInt("index") + " thread:" + extras.getString(TASK_THREAD));
             }
 
             @Override
             public void onTaskStarted(final String name, final Bundle extras) {
-                println("task started " + name + " index:" + extras.getInt("index"));
+                println("task started " + " index:" + extras.getInt("index"));
             }
 
             @Override
             public void onTaskFinished(final String name, final Bundle extras) {
-                println("task finished " + name + " index:" + extras.getInt("index"));
+//                println("task finished " + " index:"
+//                        + extras.getInt("index") + " thread:" + extras.getString(TASK_THREAD));
             }
 
             @Override
             public void onTaskSuccess(final String result, final Bundle extras) {
-                println("task success, index:" + extras.getInt("index"));
+                println("task success, index:"
+                        + extras.getInt("index") + " thread: " + extras.getString(TASK_THREAD));
             }
 
             @Override
             public void onTaskFailure(final Throwable ex, final Bundle extras) {
-                println("task failure index:" + extras.getInt("index"));
+                println("task failure index:"
+                        + extras.getInt("index") + " thread:" + extras.getString(TASK_THREAD));
             }
         };
 
-        TaskBuilder.create(getCallable(url, true)).with(this).check(true).callback(callback).serial(true).start();
-        TaskBuilder.create(getCallable(url, true)).with(mCaller).check(true).callback(callback).serial(true).start();
-        TaskBuilder.create(getCallable(url, true)).with(mEditText).check(true).callback(callback).serial(true).start();
-        TaskBuilder.create(getCallable(url, true)).with(new JSONObject()).check(true).callback(callback).serial(true).start();
+        TaskQueue concurrent = TaskQueue.concurrent(2);
+        TaskQueue singleThread = TaskQueue.singleThread();
 
-        TaskBuilder.create(getCallable(url, false)).with(this).check(true).callback(callback).serial(false).start();
-        TaskBuilder.create(getCallable(url, false)).with(mCaller).check(true).callback(callback).serial(false).start();
-        TaskBuilder.create(getCallable(url, false)).with(mEditText).check(true).callback(callback).serial(false).start();
-        TaskBuilder.create(getCallable(url, false)).with(new JSONObject()).check(true).callback(callback).serial(false).start();
+        TaskBuilder.create(getCallable(url, true)).with(this).check(true).callback(callback).on(concurrent).start();
+        TaskBuilder.create(getCallable(url, true)).with(mCaller).check(true).callback(callback).on(concurrent).start();
+        TaskBuilder.create(getCallable(url, true)).with(mEditText).check(true).callback(callback).on(concurrent).start();
+        TaskBuilder.create(getCallable(url, true)).with(new JSONObject()).check(true).callback(callback).on(concurrent).start();
 
-        TaskBuilder.create(getCallable(url, true), callback, this).serial(true).start();
-        TaskBuilder.create(getCallable(url, false), callback, this).serial(false).start();
-        TaskBuilder.create(getCallable(url, true), callback, this).serial(true).start();
-        TaskBuilder.create(getCallable(url, false), callback, this).serial(false).start();
-        TaskBuilder.create(getCallable(url, true), callback, "hello1").serial(true).start();
-        TaskBuilder.create(getCallable(url, false), callback, "hello2").serial(false).start();
-        TaskBuilder.create(getCallable(url, true), callback, "hello3").serial(true).start();
-        TaskBuilder.create(getCallable(url, false), callback, "hello4").serial(false).start();
+        TaskBuilder.create(getCallable(url, false)).with(this).check(true).callback(callback).on(singleThread).start();
+        TaskBuilder.create(getCallable(url, false)).with(mCaller).check(true).callback(callback).on(singleThread).start();
+        TaskBuilder.create(getCallable(url, false)).with(mEditText).check(true).callback(callback).on(singleThread).start();
+        TaskBuilder.create(getCallable(url, false)).with(new JSONObject()).check(true).callback(callback).on(singleThread).start();
 
-        TaskQueue.getDefault().execute(getCallable(url, true), callback, new View(this), true);
-        TaskQueue.getDefault().execute(getCallable(url, true), callback, new View(this), true);
+        TaskBuilder.create(getCallable(url, true), callback, this).on(concurrent).start();
+        TaskBuilder.create(getCallable(url, false), callback, this).on(singleThread).start();
+        TaskBuilder.create(getCallable(url, true), callback, this).on(concurrent).start();
+        TaskBuilder.create(getCallable(url, false), callback, this).on(singleThread).start();
+        TaskBuilder.create(getCallable(url, true), callback, "hello1").on(concurrent).start();
+        TaskBuilder.create(getCallable(url, false), callback, "hello2").on(singleThread).start();
+        TaskBuilder.create(getCallable(url, true), callback, "hello3").on(concurrent).start();
+        TaskBuilder.create(getCallable(url, false), callback, "hello4").on(singleThread).start();
 
-//        final TaskQueue queue = TaskQueue.createNew();
-//        final JSONObject o1 = new JSONObject();
-//        final JSONObject o2 = new JSONObject();
-//        for (int i = 0; i < 100; i++) {
-//            queue.execute(getCallable(url, false), callback, o1, false);
-//            TaskBuilder.create(getCallable(url, true), callback, o2).on(queue).serial(false).start();
-//        }
+        singleThread.add(getCallable(url, true), callback, new View(this));
+        singleThread.add(getCallable(url, true), callback, new View(this));
+
+        final TaskQueue queue = TaskQueue.concurrent(10);
+        final JSONObject o1 = new JSONObject();
+        final JSONObject o2 = new JSONObject();
+        new Thread() {
+            @Override
+            public void run() {
+                for (int i = 0; i < 100; i++) {
+                    queue.add(getCallable(url, false), callback, o1);
+                    Log.e(TAG, " create thread No." + i);
+                }
+            }
+        }.start();
+
 //
 //        TaskQueue.getDefault().execute(new Callable<String>() {
 //            @Override
@@ -177,7 +188,7 @@ public class TaskQueueSamples extends BaseActivity {
                 super.onTaskFailure(ex, extras);
                 Log.e("Task", "onTaskFailure() error=" + ex);
             }
-        }).with(this).serial(false).start();
+        }).with(this).start();
 
         TaskBuilder.create(new Callable<JSONObject>() {
             @Override
@@ -195,7 +206,7 @@ public class TaskQueueSamples extends BaseActivity {
             public void onFailure(final Throwable ex, final Bundle extras) {
                 Log.e("Task", "onFailure() error=" + ex);
             }
-        }).serial(true).with(this).start();
+        }).with(this).start();
 
         /**
          TaskBuilder.create(callable) // 设置Callable
@@ -206,7 +217,6 @@ public class TaskQueueSamples extends BaseActivity {
          .failure(failure) //设置任务失败回调
          .check(false) //设置是否检查Caller
          .dispatch(handler)// 回调方法所在线程，默认是主线程
-         .serial(false) // 是否按顺序依次执行
          .on(queue) // 设置自定义的TaskQueue
          .build() // 生成 TaskInfo 对象
          .start(); // 开始运行任务
@@ -265,10 +275,15 @@ public class TaskQueueSamples extends BaseActivity {
         mTextView.setText(null);
     }
 
-    private void println(String text) {
-        Log.d(TAG, text);
-        mTextView.append(text);
-        mTextView.append("\n");
+    private void println(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, text);
+                mTextView.append(text);
+                mTextView.append("\n");
+            }
+        });
     }
 
     @Override

@@ -4,10 +4,14 @@
 
 ```groovy
     // http HTTP组件, 格式:jar和aar
-    compile 'com.mcxiaoke.next:http:1.+'
+    // 依赖 :core :task
+    // 1.3.0新增HttpQueue
+    compile 'com.mcxiaoke.next:http:1.3.+'
+    compile 'com.mcxiaoke.next:task:1.3.+'
+    compile 'com.mcxiaoke.next:core:1.3.+'
 ```
 
-## 介绍
+## 同步接口
 
 包含一个经过简单封装的HTTP操作模块，简化常用的网络请求操作
 
@@ -15,8 +19,21 @@
  - **NextParams** HTTP参数封装和处理
  - **NextRequest** HTTP 请求封装
  - **NextResponse** HTTP 响应数据结构
+ - **ProgressListener** HTTP请求数据传输进度回调接口
 
-## 快速入门
+## 异步接口
+
+异步HTTP，一个公开接口 `com.mcxiaoke.next.http.HttpQueue`，主要是结合 `http`模块和`task`模块，提供方便的异步网络操作，本模块主要的方法都是异步执行，内部使用 `TaskQeue` 执行异步任务管理，使用 `NextClient` 发送和解析HTTP网络请求，通过回调接口返回数据，网络请求在异步线程执行，回调方法在主线程调用，可用于替代Google的`Volley`库，能极大的减轻应用开发中异步请求数据然后主线程更新UI这一过程的工作量。
+
+- ***HttpAsync* 异步HTTP操作辅助类，支持直接的异步HEAD/GET/DELETE/POST/PUT请求
+- **HttpQueue** 异步HTTP任务队列，支持添加和取消HTTP异步任务，支持多种形式的Callback和Transformer
+- **HttpJob** HTTP任务对象，封装了Request/Callback/Transformer等
+- **HttpJobBuilder** 生成HttpJob对象的Builder
+- **HttpCallback** 异步HTTP请求回调接口，调用者可以获知HTTP请求的结果是成功还是失败，获取数据和异常对象
+- **HttpTransformer** 异步HTTP请求数据类型转换接口，支持Response/String/Gson/File等类型，支持自定义数据类型
+- **HttpProcessor** 异步HTTP请求数据处理器，支持多个Processor
+
+## 快速入门（同步接口）
 
 ### 最简单的用法
 
@@ -64,7 +81,7 @@
 
 // 返回JSON数据
     /**
-     * {
+     {
      loc_id: "108288",
      name: "阿北",
      created: "2006-01-09 21:12:47",
@@ -119,6 +136,176 @@
     NextResponse response = NextClient.getDefault().execute(request);
 ```
 
+### NextClient
+
+```java
+    OkHttpClient okHttpClient = new OkHttpClient();
+    NextClient client = new NextClient(okHttpClient);
+    client.setDebug(true);
+    client.setUserAgent("...");
+    client.setAuthorization("...");
+
+```
+
+## 快速入门（异步接口）
+
+### HttpQueue
+
+```java
+
+    HttpQueue q1 = new HttpQueue();
+    HttpQueue q2 = new HttpQueue(new NextClient());
+    HttpQueue q3 = new HttpQueue(new OkHttpClient());
+    HttpQueue q4 = new HttpQueue(TaskQueue.concurrent());
+    HttpQueue q5 = new HttpQueue(TaskQueue.concurrent(10), new NextClient());
+    HttpQueue httpQueue=HttpQueue.getDefault();
+    
+    httpQueue.add(httpJob);
+    httpQueue.add(request, responseCallback, caller);
+    httpQueue.add(request, jsonCallback, caller);
+    httpQueue.add(request, stringCallback, caller);
+    httpQueue.add(request, fileCallback, caller);
+    httpQueue.add(request, bitmapCallback, caller);
+	httpQueue.add(request, transformer, callback, caller);
+    httpQueue.add(request, transformer, callback, caller,
+               requestProcessor, preProcessor, postProcessor);
+               
+    httpQueue.cancel(name);
+    httpQueue.cancelAll(caller);
+    httpQueue.cancelAll();
+    
+    httpQueue.setClient(nextClient);
+    httpQueue.setGson(gson);
+    httpQueue.setQueue(taskQueu);
+    httpQueue.setDebug(true);
+
+
+```
+
+### HttpJob
+
+```java
+        final String url = "https://api.github.com/users/mcxiaoke";
+        final NextRequest request = NextRequest.get(url);
+        final StringCallback callback = new StringCallback() {
+            @Override
+            public void handleResponse(final String response) {
+                // request success
+            }
+
+            @Override
+            public void handleException(final Throwable error) {
+                // request failure
+            }
+        };
+        final HttpProcessor<NextRequest> requestProcessor=new HttpProcessor<NextRequest>() {
+            @Override
+            public void process(final NextRequest response) {
+                // process next request
+            }
+        } ;
+        final HttpProcessor<NextResponse> preProcessor=new HttpProcessor<NextResponse>() {
+            @Override
+            public void process(final NextResponse response) {
+                // process next response
+            }
+        };
+        final HttpProcessor<String> postProcessor = new HttpProcessor<String>() {
+            @Override
+            public void process(final String response) {
+                // process response data
+            }
+        };
+        httpQueue.add(request, callback, this);
+        
+        // httpQueue.add(request,new StringTransformer(),callback,this);
+        // or using HttpJob
+        final HttpJob<String> httpJob = new HttpJobBuilder<String>()
+                .request(request)
+                .callback(callback)
+                .caller(this)
+                .transformer(new StringTransformer())
+                .requestProcessor(requestProcessor)
+                .preProcessor(preProcessor)
+                .postProcessor(postProcessor)
+                .create();
+
+        httpQueue.add(httpJob);
+```
+
+### HttpQueue接口
+
+```java
+    void setDebug(boolean debug);
+    void setQueue(TaskQueue queue);
+    void setClient(NextClient client);
+    void setGson(Gson gson);
+    
+    void cancelAll(Object caller);
+    void cancel(String name);
+    void cancelAll();
+    
+    <T> String add(HttpJob<T> job);
+
+    <T> String add(NextRequest request,
+                   HttpTransformer<T> transformer,
+                   HttpCallback<T> callback,
+                   Object caller,
+                   HttpProcessor<NextRequest> requestProcessor,
+                   HttpProcessor<NextResponse> preProcessor,
+                   HttpProcessor<T> postProcessor);
+
+    <T> String add(NextRequest request,
+                   HttpTransformer<T> transformer,
+                   HttpCallback<T> callback,
+                   Object caller);
+
+    String add(NextRequest request,
+               ResponseCallback callback,
+               Object caller);
+
+    <T> String add(NextRequest request,
+                   JsonCallback<T> callback,
+                   Object caller);
+
+    String add(NextRequest request,
+               StringCallback callback,
+               Object caller);
+
+    String add(NextRequest request,
+               BitmapCallback callback,
+               Object caller);
+
+    String add(NextRequest request, File file,
+               FileCallback callback,
+               Object caller);
+```
+
+### HttpJob接口
+
+```java
+    HttpJobBuilder<T> request(NextRequest request);
+    HttpJobBuilder<T> transformer(HttpTransformer<T> transformer);
+    HttpJobBuilder<T> callback(HttpCallback<T> callback);
+    HttpJobBuilder<T> caller(Object caller);
+    HttpJobBuilder<T> requestProcessor(HttpProcessor<NextRequest> processor);
+    HttpJobBuilder<T> preProcessor(HttpProcessor<NextResponse> processor);
+    HttpJobBuilder<T> postProcessor(HttpProcessor<T> processor);
+    HttpJob<T> create();
+    
+    public HttpJob(final NextRequest request,
+                   final HttpTransformer<T> transformer,
+                   final HttpCallback<T> callback,
+                   final Object caller);
+
+    public HttpJob(final NextRequest request,
+                   final HttpTransformer<T> transformer,
+                   final HttpCallback<T> callback,
+                   final Object caller,
+                   List<HttpProcessor<NextRequest>> requestProcessors,
+                   final List<HttpProcessor<NextResponse>> preProcessors,
+                   final List<HttpProcessor<T>> postProcessors);
+```
 
 ## HTTP Response
 
@@ -251,18 +438,6 @@ NextClient addHeaders(Map<String, String> headers);
 
 NextClient setInterceptor(OkClientInterceptor interceptor);
 
-NextClient setHostnameVerifier(HostnameVerifier hostnameVerifier);
-NextClient setSocketFactory(SocketFactory socketFactory);
-NextClient setSslSocketFactory(SSLSocketFactory sslSocketFactory);
-
-NextClient setFollowRedirects(boolean followRedirects);
-NextClient setFollowSslRedirects(boolean followProtocolRedirects);
-NextClient setRetryOnConnectionFailure(boolean retryOnConnectionFailure);
-
-NextClient setConnectTimeout(long timeout, TimeUnit unit);
-NextClient setReadTimeout(long timeout, TimeUnit unit);
-NextClient setWriteTimeout(long timeout, TimeUnit unit);
-
 NextClient setUserAgent(String userAgent);
 NextClient setAuthorization(String authorization);
 NextClient setReferer(String referer);
@@ -346,84 +521,93 @@ NextResponse execute(NextRequest req)
         throws IOException;
 ```
 
-## 综合示例
+## HTTP请求示例
 
 
 ```java
 
-        final String url = "https://github.com/mcxiaoke/Android-Next/raw/master/README.md";
-        try {
-            // simple use
-            // get next client
-            // final NextClient client=NextClient.getDefault();
-            final NextClient client = new NextClient();
-            // http get
-            final NextResponse res1 = client.get(url);
-            final Map<String, String> queries = new HashMap<String, String>();
-            queries.put("uid", "next");
-            queries.put("date", "2015-07-02");
-            final NextResponse res2 = client.get(url, queries);
-            // http post
-            final Map<String, String> forms = new HashMap<String, String>();
-            queries.put("data", "hello");
-            queries.put("date", "2015-07-02");
-            final NextResponse res3 = client.post(url, forms);
+    final String url = "https://github.com/mcxiaoke/Android-Next/raw/master/README.md";
+    try {
+        // simple use
+        // get next client
+        // final NextClient client=NextClient.getDefault();
+        OkHttpClient okHttpClient = new OkHttpClient();
+        final Cache cache = new Cache(getCacheDir(), 100 * 1024 * 1024);
+        okHttpClient.setCache(cache);
+        final NextClient client = new NextClient(okHttpClient).setDebug(true);
+        // http get
+        final NextResponse res1 = client.get(url);
+        final Map<String, String> queries = new HashMap<String, String>();
+        queries.put("uid", "next");
+        queries.put("date", "2015-07-02");
+        final NextResponse res2 = client.get(url, queries);
+        // http post
+        final Map<String, String> forms = new HashMap<String, String>();
+        queries.put("data", "hello");
+        queries.put("date", "2015-07-02");
+        final NextResponse res3 = client.post(url, forms);
 
 
-            // using NextParams
-            final NextParams params = new NextParams();
-            params.query("uid", "next");
-            params.query("date", "2015-07-02");
-            params.form("text", "hello");
-            params.form("test", "wahahah");
-            params.file("image", new File("IMG_20141222.jpg"), "image/jpeg");
-            final NextResponse res = client.post(url, params);
+        // using NextParams
+        final NextParams params = new NextParams();
+        params.query("uid", "next");
+        params.query("date", "2015-07-02");
+        params.form("text", "hello");
+        params.form("test", "wahahah");
+        params.file("image", new File("IMG_20141222.jpg"), "image/jpeg");
+        final NextResponse res = client.post(url, params);
 
-            // advanced use
-            final NextRequest request = NextRequest.post(url)
-                    .debug(true)
-                    .charset(HttpConsts.CHARSET_UTF8)
-                    .method(HttpMethod.POST)
-                    .header("X-UDID", "cxgdg4543gd64tgdgs2tgdgst4")
-                    .file("image", new File("IMG_20141222.jpg"), "image/jpeg")
-                    .query("debug_mode", "true")
-                    .form("param1", "value1")
-                            // http progress callback
-                            // for monitor upload/download file progress
-                    .authorization("Bearer %your access token here")
-                    .userAgent("com.mcxiaoke.next/1.1.5 Android/19")
-                    .progress(new ProgressListener() {
-                        @Override
-                        public void update(final long bytesRead, final long contentLength,
-                                           final boolean done) {
-                            Log.v("HTTP", "http progress: " + bytesRead * 100 / contentLength);
-                        }
-                    });
+        // advanced use
+        final NextRequest request = NextRequest.post(url)
+                .debug(true)
+                .charset(HttpConsts.CHARSET_UTF8)
+                .method(HttpMethod.POST)
+                .header("X-UDID", "cxgdg4543gd64tgdgs2tgdgst4")
+                .file("image", new File("IMG_20141222.jpg"), "image/jpeg")
+                .query("debug_mode", "true")
+                .form("param1", "value1")
+                        // http progress callback
+                        // for monitor upload/download file progress
+                .authorization("Bearer %your access token here")
+                .userAgent("com.mcxiaoke.next/1.1.5 Android/19")
+                .listener(new ProgressListener() {
+                    @Override
+                    public void update(final long bytesRead, final long contentLength,
+                                       final boolean done) {
+                        Log.v("HTTP", "http progress: " + bytesRead * 100 / contentLength);
+                    }
+                })
+                .interceptor(new OkClientInterceptor() {
+                    @Override
+                    public void intercept(final OkHttpClient client) {
+                        // config client here
+                    }
+                });
 
-            final NextResponse response = client.execute(request);
-            // get response meta-data
-            Log.v(TAG, "http response successful: " + response.successful());
-            Log.v(TAG, "http response statusCode: " + response.code());
-            Log.v(TAG, "http response statusMessage: " + response.message());
-            Log.v(TAG, "http response contentLength: " + response.contentLength());
-            Log.v(TAG, "http response contentType: " + response.contentType());
-            // get 301/302/30x location header
-            Log.v(TAG, "http response location: " + response.location());
-            Log.v(TAG, "http response Server:" + response.header("Server"));
-            Log.v(TAG, "http response Connection: " + response.header("Connection"));
-            // get body as string
-            Log.v(TAG, "http response content: " + response.string());
-            // get body as  bytes
-            final byte[] bytes = response.bytes();
-            final Bitmap bitmap1 = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-            // get body as  stream
-            final InputStream stream = response.stream();
-            final Bitmap bitmap2 = BitmapFactory.decodeStream(stream);
-            // get body as reader
-            final Reader reader = response.reader();
+        final NextResponse response = client.execute(request);
+        // get response meta-data
+        Log.v(TAG, "http response successful: " + response.successful());
+        Log.v(TAG, "http response statusCode: " + response.code());
+        Log.v(TAG, "http response statusMessage: " + response.message());
+        Log.v(TAG, "http response contentLength: " + response.contentLength());
+        Log.v(TAG, "http response contentType: " + response.contentType());
+        // get 301/302/30x location header
+        Log.v(TAG, "http response location: " + response.location());
+        Log.v(TAG, "http response Server:" + response.header("Server"));
+        Log.v(TAG, "http response Connection: " + response.header("Connection"));
+        // get body as string
+        Log.v(TAG, "http response content: " + response.string());
+        // get body as  bytes
+        final byte[] bytes = response.bytes();
+        final Bitmap bitmap1 = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        // get body as  stream
+        final InputStream stream = response.stream();
+        final Bitmap bitmap2 = BitmapFactory.decodeStream(stream);
+        // get body as reader
+        final Reader reader = response.reader();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
 
 ```

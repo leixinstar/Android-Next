@@ -58,16 +58,6 @@ final class TaskImpl<Result> implements Task<Result> {
         mInfo.queue.remove(this);
     }
 
-    /**
-     * 任务是否顺序执行
-     *
-     * @return 是否顺序执行
-     */
-    @Override
-    public boolean isSerial() {
-        return mInfo.serial;
-    }
-
     @Override
     public String getGroup() {
         return mInfo.tag.getGroup();
@@ -167,7 +157,7 @@ final class TaskImpl<Result> implements Task<Result> {
             }
         };
         if (Config.DEBUG) {
-            Log.d(TAG, "onDone() task using " + getDuration() + "ms " + getName()
+            Log.v(TAG, "onDone() in " + getDuration() + "ms " + getName()
                     + " cancelled=" + isCancelled());
         }
         mInfo.handler.post(runnable);
@@ -177,6 +167,7 @@ final class TaskImpl<Result> implements Task<Result> {
     private void addResultExtras() {
         final TaskTag tag = mInfo.tag;
         final TaskCallable<Result> action = mInfo.action;
+        action.putExtra(TaskCallback.TASK_THREAD, Thread.currentThread().toString());
         action.putExtra(TaskCallback.TASK_GROUP, tag.getGroup());
         action.putExtra(TaskCallback.TASK_NAME, tag.getName());
         action.putExtra(TaskCallback.TASK_SEQUENCE, tag.getSequence());
@@ -197,7 +188,7 @@ final class TaskImpl<Result> implements Task<Result> {
         }
         if (isCallerDead()) {
             if (Config.DEBUG) {
-                Log.d(TAG, "onStarted() " + getName() + " caller dead, cancel task");
+                Log.v(TAG, "onStarted() " + getName() + " caller dead, cancel task");
             }
             cancel();
             return;
@@ -251,7 +242,7 @@ final class TaskImpl<Result> implements Task<Result> {
     @Override
     public void onSuccess(final Result result) {
         if (Config.DEBUG) {
-            Log.d(TAG, "onSuccess() " + getName() + " cancelled=" + isCancelled());
+            Log.v(TAG, "onSuccess() " + getName() + " cancelled=" + isCancelled());
         }
         mStatus = TaskFuture.SUCCESS;
         if (isCancelled() || isCallerDead()) {
@@ -269,8 +260,8 @@ final class TaskImpl<Result> implements Task<Result> {
     @Override
     public void onFailure(final Throwable error) {
         if (Config.DEBUG) {
-            Log.w(TAG, "onFailure() " + getName() + " cancelled=" + isCancelled()
-                    + " error=" + Log.getStackTraceString(error));
+            Log.v(TAG, "onFailure() " + getName() + " cancelled=" + isCancelled()
+                    + " error=" + error);
         }
         mStatus = TaskFuture.FAILURE;
         if (isCancelled() || isCallerDead()) {
@@ -287,7 +278,7 @@ final class TaskImpl<Result> implements Task<Result> {
 
     boolean isCallerDead() {
         final Object caller = mInfo.callerRef.get();
-        return caller == null || (mInfo.check && !Utils.isActive(caller));
+        return caller == null || (mInfo.check && !ThreadUtils.isActive(caller));
     }
 
     private void dumpCaller() {
@@ -300,7 +291,7 @@ final class TaskImpl<Result> implements Task<Result> {
             Log.d(TAG, "dump() caller check is not enabled " + getName());
             return;
         }
-        final boolean notActive = !Utils.isActive(caller);
+        final boolean notActive = !ThreadUtils.isActive(caller);
         if (notActive) {
             Log.w(TAG, "dump() caller is not active " + getName());
         }

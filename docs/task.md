@@ -3,7 +3,7 @@
 ```groovy
     // v1.1.0 新增
     // task 异步任务库，格式:jar和aar
-    compile 'com.mcxiaoke.next:task:1.+'
+    compile 'com.mcxiaoke.next:task:1.3.+'
 ```
 
 ## 异步任务
@@ -52,8 +52,8 @@
             }
         }).success(new Success<JSONObject>() {
             @Override
-            public void onSuccess(final JSONObject result, final Bundle extras) {
-                Log.v("Task", "onSuccess() result=" + result);
+            public void handleResponse(final JSONObject result, final Bundle extras) {
+                Log.v("Task", "handleResponse() result=" + result);
             }
         }).failure(new Failure() {
             @Override
@@ -123,14 +123,50 @@
 
 #### TaskQueue
 
+TaskQueue的接口
+
+```java
+    // 设置ExecutorService
+    void setExecutor(ExecutorService executor);
+    // 添加任务
+    <Result> String add(Callable<Result> callable,
+                        TaskCallback<Result> callback,
+                        Object caller);
+    // 添加任务
+    <Result> String add(Callable<Result> callable,
+                        TaskCallback<Result> callback);
+    // 添加任务
+    <Result> String add(Callable<Result> callable, Object caller);
+    // 添加任务
+    <Result> String add(final Callable<Result> callable);
+    // 添加任务
+    String add(final Runnable runnable);
+    // 取消任务
+    boolean cancel(String name);
+    // 取消任务
+    int cancelAll(Object caller);
+    // 取消所有任务
+    void cancelAll();
+```
+
+TaskQueue的用法
+
 ```java
 
         // TaskQueue的接口定义见 com.mcxiaoke.next.task.ITaskQueue
 
-        // 使用默认TaskQueue
+        // 使用默认TaskQueue，线程数无限制
         final TaskQueue taskQueue=TaskQueue.getDefault();
-        // 使用新的自定义TaskQueue
-        final TaskQueue taskQueue2=TaskQueue.createNew();
+        // 自定义TaskQueue，线程数无限制
+        TaskQueue cached = TaskQueue.concurrent();
+        // 自定义TaskQueue，线程数无限制
+        TaskQueue p0 = TaskQueue.concurrent(0);
+        // 自定义TaskQueue，最大同时执行线程10
+        TaskQueue p10 = TaskQueue.concurrent(10);
+        // 单线程模式，顺序执行
+        TaskQueue p1 = TaskQueue.concurrent(1);
+        TaskQueue singleThread = TaskQueue.singleThread();
+
         taskQueue2.setDebug(true);
         taskQueue2.setExecutor(Executors.newCachedThreadPool());
 
@@ -172,12 +208,10 @@
             }
         };
         // execute task
-        taskQueue.execute(callable,callback,caller,serial);
+        taskQueue.add(callable,callback,caller);
          taskQueue
         // add task, execute concurrently
         taskQueue.add(callable,callback,caller);
-        // add task, execute serially
-        taskQueue.addSerially(callable, callback, caller);
         // set custom task executor
         taskQueue.setExecutor(executor);
         // save task name for cancel the task
@@ -226,7 +260,7 @@ public interface TaskCallback<Result> {
     void onTaskStarted(final String name, final Bundle extras);
 
     /**
-     * 任务完成
+     * 任务完成，无论是成功还是失败此方法都会调用，任务取消则不会调用
      * 注意：此方法默认运行于主线程，可通过 TaskBuilder.dispatch(handler)更改
      *
      * @param status TASK NAME
@@ -235,7 +269,7 @@ public interface TaskCallback<Result> {
     void onTaskFinished(final String name, final Bundle extras);
 
     /**
-     * 任务取消
+     * 任务取消时调用
      * 注意：此方法默认运行于主线程，可通过 TaskBuilder.dispatch(handler)更改
      *
      * @param status TASK NAME
@@ -244,7 +278,7 @@ public interface TaskCallback<Result> {
     void onTaskCancelled(final String name, final Bundle extras);
 
     /**
-     * 回调，任务执行完成
+     * 回调，任务执行成功，无异常
      * 注意：此方法默认运行于主线程，可通过 TaskBuilder.dispatch(handler)更改
      *
      * @param result 执行结果
@@ -253,7 +287,7 @@ public interface TaskCallback<Result> {
     void onTaskSuccess(Result result, final Bundle extras);
 
     /**
-     * 回调，任务执行失败
+     * 回调，任务执行失败，有异常
      * 注意：此方法默认运行于主线程，可通过 TaskBuilder.dispatch(handler)更改
      *
      * @param ex     失败原因，异常
@@ -270,7 +304,7 @@ public interface TaskCallback<Result> {
 
     // 任务成功的回调接口，先于TaskCallback.onTaskSuccess执行
     public interface Success<Result> {
-        void onSuccess(final Result result, final Bundle extras);
+        void handleResponse(final Result result, final Bundle extras);
     }
 
     // 任务失败的回调接口，先于TaskCallback.onTaskFailure执行

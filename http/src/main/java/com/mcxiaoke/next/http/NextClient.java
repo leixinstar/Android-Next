@@ -1,19 +1,16 @@
 package com.mcxiaoke.next.http;
 
 import android.util.Log;
-import com.mcxiaoke.next.http.converter.ResponseConverter;
+import com.mcxiaoke.next.http.transformer.HttpTransformer;
 import com.mcxiaoke.next.utils.AssertUtils;
+import com.mcxiaoke.next.utils.LogUtils;
 import com.squareup.okhttp.Headers;
 import com.squareup.okhttp.OkHttpClient;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
 
-import javax.net.SocketFactory;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLSocketFactory;
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * User: mcxiaoke
@@ -32,14 +29,16 @@ public final class NextClient {
 
     public static final String TAG = NextClient.class.getSimpleName();
     private boolean mDebug;
-    private final OkHttpClient mClient;
-    private OkClientInterceptor mInterceptor;
+    private OkHttpClient mClient;
     private Map<String, String> mParams;
     private Map<String, String> mHeaders;
 
     public NextClient() {
-        mClient = new OkHttpClient();
-        mClient.setFollowRedirects(true);
+        this(new OkHttpClient());
+    }
+
+    public NextClient(OkHttpClient client) {
+        mClient = client;
         mParams = new NoEmptyValuesHashMap();
         mHeaders = new NoEmptyValuesHashMap();
     }
@@ -47,6 +46,26 @@ public final class NextClient {
     public NextClient setDebug(final boolean debug) {
         mDebug = debug;
         return this;
+    }
+
+    public boolean isDebug() {
+        return mDebug;
+    }
+
+    public void setClient(final OkHttpClient client) {
+        mClient = client;
+    }
+
+    public OkHttpClient getClient() {
+        return mClient;
+    }
+
+    public Map<String, String> getHeaders() {
+        return mHeaders;
+    }
+
+    public Map<String, String> getParams() {
+        return mParams;
     }
 
     /***********************************************************
@@ -108,68 +127,6 @@ public final class NextClient {
 
     public int getHeadersSize() {
         return mHeaders.size();
-    }
-
-    public NextClient setInterceptor(final OkClientInterceptor interceptor) {
-        mInterceptor = interceptor;
-        return this;
-    }
-
-    public NextClient setHostnameVerifier(HostnameVerifier hostnameVerifier) {
-        mClient.setHostnameVerifier(hostnameVerifier);
-        return this;
-    }
-
-    public NextClient setSocketFactory(SocketFactory socketFactory) {
-        mClient.setSocketFactory(socketFactory);
-        return this;
-    }
-
-    public NextClient setSslSocketFactory(SSLSocketFactory sslSocketFactory) {
-        mClient.setSslSocketFactory(sslSocketFactory);
-        return this;
-    }
-
-    public NextClient setFollowRedirects(boolean followRedirects) {
-        mClient.setFollowRedirects(followRedirects);
-        return this;
-    }
-
-    public NextClient setFollowSslRedirects(boolean followProtocolRedirects) {
-        mClient.setFollowSslRedirects(followProtocolRedirects);
-        return this;
-    }
-
-    public NextClient setRetryOnConnectionFailure(boolean retryOnConnectionFailure) {
-        mClient.setRetryOnConnectionFailure(retryOnConnectionFailure);
-        return this;
-    }
-
-    public int getConnectTimeout() {
-        return mClient.getConnectTimeout();
-    }
-
-    public int getReadTimeout() {
-        return mClient.getReadTimeout();
-    }
-
-    public int getWriteTimeout() {
-        return mClient.getWriteTimeout();
-    }
-
-    public NextClient setConnectTimeout(long timeout, TimeUnit unit) {
-        mClient.setConnectTimeout(timeout, unit);
-        return this;
-    }
-
-    public NextClient setReadTimeout(long timeout, TimeUnit unit) {
-        mClient.setReadTimeout(timeout, unit);
-        return this;
-    }
-
-    public NextClient setWriteTimeout(long timeout, TimeUnit unit) {
-        mClient.setWriteTimeout(timeout, unit);
-        return this;
     }
 
     public String getUserAgent() {
@@ -342,7 +299,7 @@ public final class NextClient {
                          final Map<String, String> queries,
                          final Map<String, String> forms,
                          final Map<String, String> headers,
-                         final ResponseConverter<T> converter)
+                         final HttpTransformer<T> converter)
             throws IOException {
         return executeInternal(createRequest(method, url,
                 queries, forms, headers), converter);
@@ -354,50 +311,19 @@ public final class NextClient {
         return executeInternal(createRequest(method, url, params));
     }
 
-
-    protected NextRequest createRequest(final HttpMethod method, final String url,
-                                        final NextParams params) {
-        final NextRequest request = new NextRequest(method, url)
-                .headers(mHeaders);
-        if (request.supportBody()) {
-            request.forms(mParams);
-        } else {
-            request.queries(mParams);
-        }
-        return request.params(params);
-    }
-
-    protected NextRequest createRequest(final HttpMethod method, final String url,
-                                        final Map<String, String> queries,
-                                        final Map<String, String> forms,
-                                        final Map<String, String> headers) {
-        final NextRequest request = new NextRequest(method, url)
-                .headers(mHeaders);
-        if (request.supportBody()) {
-            request.forms(mParams);
-            request.forms(forms);
-        } else {
-            request.queries(mParams);
-        }
-        return request.headers(headers).queries(queries);
-    }
-
-    public NextResponse execute(final NextRequest req)
+    public NextResponse execute(final NextRequest request)
             throws IOException {
-        // add client params and headers to request
-        final NextRequest request = new NextRequest(req.method(), req.url().toString());
-        if (request.supportBody()) {
-            request.forms(mParams);
-        } else {
-            request.queries(mParams);
-        }
-        request.copy(req);
         return executeInternal(request);
     }
 
-    public <T> T execute(final NextRequest req, final ResponseConverter<T> converter)
+    public <T> T execute(final NextRequest req, final HttpTransformer<T> transformer)
             throws IOException {
-        return executeInternal(req, converter);
+        return executeInternal(req, transformer);
+    }
+
+    public NextResponse execute(Request request)
+            throws IOException {
+        return new NextResponse(sendRequest(request));
     }
 
     protected NextResponse executeInternal(final NextRequest request)
@@ -406,38 +332,134 @@ public final class NextClient {
     }
 
     protected <T> T executeInternal(final NextRequest request,
-                                    final ResponseConverter<T> converter)
+                                    final HttpTransformer<T> transformer)
             throws IOException {
-        final NextResponse response = new NextResponse(sendRequest(request));
-        return converter.convert(response);
+        final Response response = sendRequest(request);
+        final NextResponse nextResponse = new NextResponse(response);
+        return transformer.transform(nextResponse);
     }
 
-    protected Response sendRequest(final NextRequest nr)
+    public Response sendRequest(final NextRequest request)
             throws IOException {
-
-        final Request request = createOkRequest(nr);
         final OkHttpClient client = mClient.clone();
-        if (mDebug || nr.debug()) {
-            Log.v(NextClient.TAG, "execute() " + nr.dump());
-            // intercept for logging
+        final OkClientInterceptor it = request.getInterceptor();
+        if (it != null) {
+            it.intercept(client);
+        }
+        if (mDebug || request.isDebug()) {
+            client.networkInterceptors().add(new LoggingInterceptor());
+            LogUtils.v(NextClient.TAG, "[sendRequest] " + request);
+            logHttpCurl(request);
+        }
+        final ProgressListener li = request.getListener();
+        if (li != null) {
+            client.interceptors().add(new ProgressInterceptor(li));
+        }
+        return sendOkRequest(createOkRequest(request), client, request.isDebug());
+    }
+
+    public Response sendRequest(final Request request)
+            throws IOException {
+        final OkHttpClient client = mClient.clone();
+        if (mDebug) {
+            Log.v(NextClient.TAG, "Sending " + request);
             client.networkInterceptors().add(new LoggingInterceptor());
         }
-        // intercept for progress callback
-        if (nr.listener() != null) {
-            client.interceptors().add(new ProgressInterceptor(nr.listener()));
-        }
-        if (mInterceptor != null) {
-            mInterceptor.intercept(client);
-        }
-        return client.newCall(request).execute();
-
+        return sendOkRequest(request, client, false);
     }
 
-    static Request createOkRequest(final NextRequest nr) throws IOException {
+    private Response sendOkRequest(final Request request,
+                                   final OkHttpClient client,
+                                   final boolean debug)
+            throws IOException {
+        long start = System.nanoTime();
+        try {
+            final Response response = client.newCall(request).execute();
+            if (mDebug || debug) {
+                Log.d(NextClient.TAG, "[sendRequest][OK] " + request.urlString()
+                        + " in " + (System.nanoTime() - start) / 1000000
+                        + "ms Response:" + response);
+            }
+            return response;
+        } catch (IOException e) {
+            if (mDebug || debug) {
+                Log.w(NextClient.TAG, "[sendRequest][FAIL] " + request.urlString()
+                        + " in " + (System.nanoTime() - start) / 1000000
+                        + "ms  Error:" + e);
+            }
+            throw e;
+        }
+    }
+
+    public NextRequest createRequest(final HttpMethod method, final String url,
+                                     final NextParams params) {
+        final NextRequest request = new NextRequest(method, url);
+        if (request.supportBody()) {
+            request.forms(mParams);
+        } else {
+            request.queries(mParams);
+        }
+        request.headers(mHeaders);
+        return request.params(params);
+    }
+
+    public NextRequest createRequest(final HttpMethod method, final String url,
+                                     final Map<String, String> queries,
+                                     final Map<String, String> forms,
+                                     final Map<String, String> headers) {
+        final NextRequest request = new NextRequest(method, url);
+        if (request.supportBody()) {
+            request.forms(mParams);
+        } else {
+            request.queries(mParams);
+        }
+        request.headers(mHeaders);
+        return request.queries(queries)
+                .forms(forms).headers(headers);
+    }
+
+    public Request createOkRequest(final NextRequest request) throws IOException {
         return new Request.Builder()
-                .url(nr.url())
-                .headers(Headers.of(nr.headers()))
-                .method(nr.method().name(), nr.getRequestBody()).build();
+                .url(request.url())
+                .headers(Headers.of(request.headers()))
+                .method(request.method().name(), request.getRequestBody()).build();
+    }
+
+    public Request createOkRequest(final HttpMethod method, final String url,
+                                   final Map<String, String> queries,
+                                   final Map<String, String> forms,
+                                   final Map<String, String> headers)
+            throws IOException {
+        return createOkRequest(createRequest(method, url, queries, forms, headers));
+    }
+
+    private void logHttpCurl(final NextRequest request) {
+        final StringBuilder builder = new StringBuilder();
+        builder.append("http");
+        builder.append(" -f");
+        builder.append(" ").append(request.method().name());
+        builder.append(" ").append(request.url());
+//
+//        for (Map.Entry<String, String> entry : request.queries().entrySet()) {
+//            builder.append(" ").append(entry.getKey()).append("==").append(entry.getValue());
+//        }
+
+        for (Map.Entry<String, String> entry : request.form().entrySet()) {
+            builder.append(" ").append(entry.getKey()).append("=\"")
+                    .append(entry.getValue()).append("\"");
+        }
+
+        for (BodyPart part : request.parts()) {
+            builder.append(" ").append(part.getName()).append("@").append(part.getFileName());
+        }
+
+        for (Map.Entry<String, String> entry : request.headers().entrySet()) {
+            builder.append(" ").append(entry.getKey()).append(":\"")
+                    .append(entry.getValue()).append("\"");
+        }
+
+        LogUtils.i(TAG, "Http Command: [ " + builder.toString() + " ]");
+
     }
 
 }

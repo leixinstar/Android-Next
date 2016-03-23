@@ -1,7 +1,9 @@
 package com.mcxiaoke.next.http;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParser;
 import com.mcxiaoke.next.utils.IOUtils;
-import com.mcxiaoke.next.utils.StringUtils;
 import com.squareup.okhttp.Headers;
 import com.squareup.okhttp.Response;
 
@@ -20,7 +22,7 @@ import java.util.Date;
  * Time: 11:22
  */
 public class NextResponse implements Closeable {
-    public static final String TAG = NextResponse.TAG;
+    public static final String TAG = NextResponse.class.getSimpleName();
 
     private Response mResponse;
     private int mStatusCode;
@@ -56,6 +58,10 @@ public class NextResponse implements Closeable {
 
     public String message() {
         return mMessage;
+    }
+
+    public String description() {
+        return mStatusCode + ":" + mMessage;
     }
 
     public long contentLength() throws IOException {
@@ -118,11 +124,13 @@ public class NextResponse implements Closeable {
         mResponse.body().close();
     }
 
-    public String dumpContent() {
+    public String dumpBody() {
         try {
-            return StringUtils.safeSubString(string(), 256);
+            char[] buffer = new char[512];
+            reader().read(buffer);
+            return new String(buffer);
         } catch (IOException e) {
-            return "IOException";
+            return e.getMessage();
         }
     }
 
@@ -130,14 +138,13 @@ public class NextResponse implements Closeable {
         return mResponse.headers().toString();
     }
 
+    public static String prettyPrintJson(final String rawJson) {
+        final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        return gson.toJson(new JsonParser().parse(rawJson));
+    }
+
     @Override
     public String toString() {
-        return "NextResponse{" +
-                "mCreatedAt=" + mCreatedAt +
-                ", statusCode=" + mStatusCode +
-                ", statusMessage='" + mMessage + '\'' +
-                ", content='" + dumpContent() + '\'' +
-                ", headers=" + dumpHeaders() +
-                '}';
+        return String.valueOf(mResponse);
     }
 }

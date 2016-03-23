@@ -14,6 +14,7 @@ import android.os.Bundle;
  * @param <Result> 类型参数，任务执行结果
  */
 public interface TaskCallback<Result> {
+    String TASK_THREAD = "task_thread";
     String TASK_GROUP = "task_group";
     String TASK_NAME = "task_name";
     String TASK_SEQUENCE = "task_sequence";
@@ -27,7 +28,7 @@ public interface TaskCallback<Result> {
      * @param name   TASK NAME
      * @param extras 附加结果，需要返回多种结果时会用到
      */
-    void onTaskStarted(final String name, final Bundle extras);
+    void onTaskStarted(String name, Bundle extras);
 
     /**
      * 任务完成
@@ -36,7 +37,7 @@ public interface TaskCallback<Result> {
      * @param name   TASK NAME
      * @param extras 附加结果，需要返回多种结果时会用到
      */
-    void onTaskFinished(final String name, final Bundle extras);
+    void onTaskFinished(String name, Bundle extras);
 
     /**
      * 任务取消
@@ -45,7 +46,7 @@ public interface TaskCallback<Result> {
      * @param name   TASK NAME
      * @param extras 附加结果，需要返回多种结果时会用到
      */
-    void onTaskCancelled(final String name, final Bundle extras);
+    void onTaskCancelled(String name, Bundle extras);
 
     /**
      * 回调，任务执行完成
@@ -54,7 +55,7 @@ public interface TaskCallback<Result> {
      * @param result 执行结果
      * @param extras 附加结果，需要返回多种结果时会用到
      */
-    void onTaskSuccess(Result result, final Bundle extras);
+    void onTaskSuccess(Result result, Bundle extras);
 
     /**
      * 回调，任务执行失败
@@ -63,7 +64,7 @@ public interface TaskCallback<Result> {
      * @param ex     失败原因，异常
      * @param extras 附加结果，需要返回额外的信息时会用到
      */
-    void onTaskFailure(Throwable ex, final Bundle extras);
+    void onTaskFailure(Throwable ex, Bundle extras);
 
 
 }

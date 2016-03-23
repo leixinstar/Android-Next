@@ -12,95 +12,85 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 一个用于执行异步任务的类，单例，支持检查Caller，支持按照Caller和Tag取消对应的任务
+ * 支持创建并发执行和顺序执行两种模式的任务队列
  * User: mcxiaoke
  * Date: 2013-7-1 2013-7-25 2014-03-04 2014-03-25
- * Date: 2014-05-14 2014-05-29 2015-06-15
+ * Date: 2014-05-14 2014-05-29 2015-06-15 2015-12-25
  */
 final class TaskQueueImpl extends TaskQueue {
 
     public static final String TAG = "TaskQueue";
+    private final Object mCaller = new Object();
     private final Object mLock = new Object();
+    private int mMaxThreads;
     private ExecutorService mExecutor;
-    private ExecutorService mSerialExecutor;
     private Map<String, List<String>> mGroups;
-    private Map<String, ITaskRunnable> mRunnables;
+    private Map<String, ITaskRunnable> mTasks;
 
-    public TaskQueueImpl() {
-        Log.v(TAG, "TaskQueue()");
-        init();
+    public TaskQueueImpl(int maxThreads) {
+        Log.v(TAG, "TaskQueue() maxThreads:" + maxThreads);
+        if (maxThreads < 0) {
+            throw new IllegalArgumentException("Invalid Argument, maxThreads:" + maxThreads);
+        }
+        mMaxThreads = maxThreads;
         checkThread();
+        init();
         checkExecutor();
     }
 
+
     private void init() {
         mGroups = new ConcurrentHashMap<String, List<String>>();
-        mRunnables = new ConcurrentHashMap<String, ITaskRunnable>();
+        mTasks = new ConcurrentHashMap<String, ITaskRunnable>();
     }
 
     /********************************************************************
-     *
      * PUBLIC METHODS
-     *
      *******************************************************************/
-
-
-    /**
-     * 执行异步任务，回调时会检查Caller是否存在，如果不存在就不执行回调函数
-     *
-     * @param callable Callable对象，任务的实际操作
-     * @param callback 回调接口
-     * @param caller   调用方，一般为Fragment或Activity
-     * @param serial   是否按顺序执行任务
-     * @param <Result> 类型参数，异步任务执行结果
-     * @return 返回内部生成的此次任务的TAG
-     */
-    @Override
-    public <Result> String execute(final Callable<Result> callable,
-                                   final TaskCallback<Result> callback,
-                                   final Object caller, final boolean serial) {
-        checkArguments(callable, caller);
-        return execute(TaskBuilder.create(callable).with(caller).callback(callback)
-                .serial(serial).on(this).create());
-    }
 
     @Override
     public <Result> String add(final Callable<Result> callable,
                                final TaskCallback<Result> callback,
                                final Object caller) {
-        return execute(callable, callback, caller, false);
+        return execute(callable, callback, caller);
     }
 
     /**
      * @param callable Callable
-     * @param caller   Caller
+     * @param callback callback
      * @param <Result> Result
      * @return Tag
      */
+    @Override
+    public <Result> String add(final Callable<Result> callable,
+                               final TaskCallback<Result> callback) {
+        return add(callable, callback, mCaller);
+    }
+
     @Override
     public <Result> String add(final Callable<Result> callable, final Object caller) {
         return add(callable, null, caller);
     }
 
     @Override
-    public <Result> String addSerially(final Callable<Result> callable,
-                                       final TaskCallback<Result> callback, final Object caller) {
-        return execute(callable, callback, caller, true);
+    public String add(final Runnable runnable) {
+        final Callable<Boolean> callable = new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                runnable.run();
+                return true;
+            }
+        };
+        return add(callable, null, mCaller);
     }
 
-    /**
-     * @param callable Callable
-     * @param caller   Caller
-     * @param <Result> Result
-     * @return Tag
-     */
     @Override
-    public <Result> String addSerially(final Callable<Result> callable, final Object caller) {
-        return addSerially(callable, null, caller);
+    public <Result> String add(final Callable<Result> callable) {
+        return add(callable, null, mCaller);
     }
 
     /**
@@ -194,13 +184,13 @@ final class TaskQueueImpl extends TaskQueue {
         builder.append("Groups:{");
         for (Map.Entry<String, List<String>> entry : callerMap.entrySet()) {
             builder.append(" group:").append(entry.getKey())
-                    .append(", tags:").append(Utils.toString(entry.getValue())).append(";");
+                    .append(", tags:").append(ThreadUtils.toString(entry.getValue())).append(";");
         }
         builder.append("}\n");
         builder.append("]");
 
         // task map
-        Map<String, ITaskRunnable> taskMap = mRunnables;
+        Map<String, ITaskRunnable> taskMap = mTasks;
         builder.append("Tasks:{");
         for (Map.Entry<String, ITaskRunnable> entry : taskMap.entrySet()) {
             builder.append(" tag:").append(entry.getKey())
@@ -230,15 +220,35 @@ final class TaskQueueImpl extends TaskQueue {
         if (Config.DEBUG) {
             Log.v(TAG, "execute() task=" + task);
         }
+        checkExecutor();
         assert task != null;
         final ITaskRunnable runnable = TaskFactory.createRunnable(task);
-        final boolean serial = task.isSerial();
         final String group = task.getGroup();
         final String name = task.getName();
         addToRunnableMap(name, runnable);
         addToGroupMap(name, group);
-        smartSubmit(runnable, serial);
+
+        runnable.setFuture(mExecutor.submit(runnable));
         return name;
+    }
+
+
+    /**
+     * 执行异步任务，回调时会检查Caller是否存在，如果不存在就不执行回调函数
+     *
+     * @param callable Callable对象，任务的实际操作
+     * @param callback 回调接口
+     * @param caller   调用方，一般为Fragment或Activity
+     * @param <Result> 类型参数，异步任务执行结果
+     * @return 返回内部生成的此次任务的TAG
+     */
+    @Override
+    <Result> String execute(final Callable<Result> callable,
+                            final TaskCallback<Result> callback,
+                            final Object caller) {
+        checkArguments(callable, caller);
+        return execute(TaskBuilder.create(callable).with(caller).
+                callback(callback).on(this).done());
     }
 
     @Override
@@ -248,7 +258,7 @@ final class TaskQueueImpl extends TaskQueue {
 
     private void addToRunnableMap(final String tag, final ITaskRunnable runnable) {
         synchronized (mLock) {
-            mRunnables.put(tag, runnable);
+            mTasks.put(tag, runnable);
         }
     }
 
@@ -273,14 +283,14 @@ final class TaskQueueImpl extends TaskQueue {
             Log.v(TAG, "cancelAllInQueue()");
         }
         long start = SystemClock.elapsedRealtime();
-        final Collection<ITaskRunnable> tasks = mRunnables.values();
+        final Collection<ITaskRunnable> tasks = mTasks.values();
         for (ITaskRunnable task : tasks) {
             if (task != null) {
                 task.cancel();
             }
         }
         synchronized (mLock) {
-            mRunnables.clear();
+            mTasks.clear();
             mGroups.clear();
         }
         if (Config.DEBUG) {
@@ -327,7 +337,7 @@ final class TaskQueueImpl extends TaskQueue {
         boolean result = false;
         final ITaskRunnable runnable;
         synchronized (mLock) {
-            runnable = mRunnables.remove(name);
+            runnable = mTasks.remove(name);
         }
         if (runnable != null) {
             result = runnable.cancel();
@@ -342,7 +352,7 @@ final class TaskQueueImpl extends TaskQueue {
             Log.v(TAG, "remove() " + task.getName());
         }
         synchronized (mLock) {
-            mRunnables.remove(task.getName());
+            mTasks.remove(task.getName());
         }
         List<String> tags = mGroups.get(task.getGroup());
         if (tags != null) {
@@ -353,30 +363,28 @@ final class TaskQueueImpl extends TaskQueue {
     }
 
     /**
-     * 将任务添加到线程池执行
-     *
-     * @param runnable 任务Runnable
-     */
-    private void smartSubmit(final ITaskRunnable runnable, final boolean serial) {
-        checkExecutor();
-        final Future<?> future;
-        if (serial) {
-            future = mSerialExecutor.submit(runnable);
-        } else {
-            future = mExecutor.submit(runnable);
-        }
-        runnable.setFuture(future);
-    }
-
-    /**
      * 检查并初始化ExecutorService
      */
     private void checkExecutor() {
         if (mExecutor == null || mExecutor.isShutdown()) {
-            mExecutor = Utils.newCachedThreadPool("task-default");
-        }
-        if (mSerialExecutor == null || mSerialExecutor.isShutdown()) {
-            mSerialExecutor = Utils.newSingleThreadExecutor("task-serial");
+            ExecutorService poolExecutor;
+            final String name = "task-queue-" + mMaxThreads;
+            switch (mMaxThreads) {
+                case 0:
+                    // cached thread pool
+                    poolExecutor = ThreadUtils.newCachedThreadPool(name);
+                    break;
+                case 1:
+                    // single thread mode
+                    poolExecutor = ThreadUtils.newSingleThreadExecutor(name);
+                    break;
+                default:
+                    // fixed thread pool
+                    poolExecutor = ThreadUtils.newFixedThreadPool(name, mMaxThreads);
+                    break;
+
+            }
+            mExecutor = poolExecutor;
         }
     }
 
@@ -387,10 +395,6 @@ final class TaskQueueImpl extends TaskQueue {
         if (mExecutor != null) {
             mExecutor.shutdown();
             mExecutor = null;
-        }
-        if (mSerialExecutor != null) {
-            mSerialExecutor.shutdown();
-            mSerialExecutor = null;
         }
     }
 
